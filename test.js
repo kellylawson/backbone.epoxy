@@ -5,7 +5,7 @@ describe("Backbone.Epoxy.Model", function() {
 	var model;
 
 
-	// Primay model for test suite:
+	// Primary model for test suite:
 	var TestModel = Backbone.Epoxy.Model.extend({
 		defaults: {
 			firstName: "Charlie",

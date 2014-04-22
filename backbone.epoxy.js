@@ -41,7 +41,7 @@
 			extend = extend || {};
 
 			for (var i in this.prototype) {
-				if (this.prototype.hasOwnProperty(i) && i !== 'constructor' && i !== 'bindings' ) {
+				if (this.prototype.hasOwnProperty(i) && i !== 'constructor' && i !== 'bindings' && i !== 'setterOptions') {
 					extend[i] = this.prototype[i];
 				}
 			}
@@ -1124,11 +1124,57 @@
 	// Epoxy.View -> Private
 	// ---------------------
 
-	// Adds a data source to a view:
-	// Data sources are Backbone.Model and Backbone.Collection instances.
-	// @param source: a source instance, or a function that returns a source.
-	// @param context: the working binding context. All bindings in a view share a context.
-	function addSourceToViewContext(source, context, options, name, prefix) {
+    /**
+     * Recurse through the model attributes to build a list of accessor methods on the context.
+     * Function added by Intuit to allow nested model syntax in binding declarations.
+     *
+     * @param source: a source instance, or a function that returns a source.
+     * @param context: the working binding context. All bindings in a view share a context.
+     * @param prefix: the model prefix, if any.  Allows binding to multiple different named models.
+     * @param options: options object that will be passed to the 'set' or 'save' call in the accessor
+     * @param nestedObject: the nested object in the model we are iterating over this pass.
+     * @param nestedName: the nested object name in the model context.
+     * @param contextPath: the qualified path to the nested object in the path.
+     */
+    function compileModelAttributes(source, context, prefix, options, nestedObject, nestedName, contextPath) {
+
+        // Create an attribute path context to allow deep model (dot) syntax
+        contextPath = contextPath || "";
+
+        if( nestedName ){
+            // Create the parent object in the context to contain the functions in this iteration,
+            // then set the new context to point to that object
+            context = context[prefix + nestedName]  =  {};
+            contextPath += nestedName + '.';
+        }
+
+        // Get the POJO from the source model if we don't have an object in this iteration
+        var theJSON = nestedObject || source.toJSON({computed:true});
+
+        _.each(theJSON, function (value, attribute) {
+
+            if( isObject(value) && !isArray(value) && !_.isDate(value) ) {
+                // Call compile on the value if it's an object
+                // Use the current subContext as the new context to add functions to.
+                // Clear out the prefix - it's only useful at the top level to distinguish different models.
+
+                compileModelAttributes(source, context, "", options, value, attribute, contextPath);
+            } else {
+
+                // Create named accessor functions:
+                // -> Attributes from 'view.model' use their normal names.
+                // -> Attributes from additional sources are named as 'source_attribute'.
+                context[prefix + attribute] = function (value) {
+                    return accessViewDataAttribute(source, contextPath + attribute, value, options);
+                };
+            }
+
+        });
+    }
+
+    // Adds a data source to a view:
+    // Data sources are Backbone.Model and Backbone.Collection instances.
+    function addSourceToViewContext(source, context, options, name, prefix) {
 
 		// Resolve source instance:
 		source = _.result(source, name);
@@ -1148,17 +1194,11 @@
 				return source;
 			};
 
-			// Compile all model attributes as accessors within the context:
-			_.each(source.toJSON({computed:true}), function(value, attribute) {
-
-				// Create named accessor functions:
-				// -> Attributes from 'view.model' use their normal names.
-				// -> Attributes from additional sources are named as 'source_attribute'.
-				context[prefix+attribute] = function(value) {
-					return accessViewDataAttribute(source, attribute, value, options);
-				};
-			});
-		}
+            // Compile all model attributes as accessors within the context:
+            //<custom code>
+            compileModelAttributes(source, context, prefix, options); // KELLY
+            //</custom code>
+        }
 		// Add Backbone.Collection source instance:
 		else if (isCollection(source)) {
 
