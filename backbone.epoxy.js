@@ -1116,7 +1116,7 @@
 		// unbinds the view before performing native removal tasks.
 		remove: function() {
 			this.removeBindings();
-			_super(this, 'remove', arguments);
+			return _super(this, 'remove', arguments);
 		}
 
 	}, mixins);
